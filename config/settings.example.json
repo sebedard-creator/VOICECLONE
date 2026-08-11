@@ -1,0 +1,23 @@
+{
+  "root_path": "Y:\\VOICECLONE",
+  "gradio": {
+    "host": "0.0.0.0",
+    "port": 7860
+  },
+  "google_drive": {
+    "auth_mode": "oauth",
+    "service_account_path": "config/service_account.json",
+    "oauth_client_path": "config/oauth_client.json",
+    "oauth_token_path": "config/oauth_token.json",
+    "upload_folder_id": "",
+    "return_folder_id": "",
+    "return_folder_name": "RVC_Output"
+  },
+  "rvc": {
+    "repo_path": "Y:\\VOICECLONE\\rvc_runtime",
+    "python_executable": "Y:\\VOICECLONE\\rvc_runtime\\.venv\\Scripts\\python.exe",
+    "f0_method": "rmvpe",
+    "device": "cpu",
+    "output_sample_rate": 48000
+  }
+}

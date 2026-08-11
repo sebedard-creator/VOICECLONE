@@ -1,0 +1,64 @@
+# Python environments and bytecode
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Private local configuration and credentials
+/config/*.json
+!/config/settings.example.json
+!/config/voice_bank.example.json
+*.env
+*.pem
+*.key
+*.p12
+
+# Generated project data, logs, and browser/runtime caches
+/cache/
+/logs/
+/temp/
+/staging/
+/dataset_cleaned/
+/Nettoyage Seul/
+/outputs/
+/models_bank/
+/README.txt
+
+# Installed local runtimes: keep only the small VOICECLONE wrapper scripts
+/audiosr_runtime_DELETE_ME/
+/rvc_runtime/*
+!/rvc_runtime/voiceclone_rvc_cli.py
+/deepfilter_runtime/*
+!/deepfilter_runtime/voiceclone_deepfilter.py
+/uvr_runtime/*
+!/uvr_runtime/voiceclone_uvr.py
+/voicefixer_runtime/*
+!/voicefixer_runtime/voiceclone_voicefixer.py
+/resemble_runtime/*
+!/resemble_runtime/voiceclone_resemble_enhance.py
+
+# Audio, model weights, indexes, and downloaded package assets
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.m4a
+*.aac
+*.opus
+*.pth
+*.pt
+*.ckpt
+*.index
+*.onnx
+*.bin
+*.safetensors
+*.npy
+*.npz
+*.th
+*.whl
+*.zip
+
+# Notebook/editor transient files
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
