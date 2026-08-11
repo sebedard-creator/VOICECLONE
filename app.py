@@ -6,7 +6,7 @@ import traceback
 from html import escape
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 import gradio as gr
 
@@ -707,22 +707,35 @@ def _colab_link_html(url: str) -> str:
     )
 
 
+def _normalize_notebook_url(url: str) -> str:
+    """Accept either a Colab URL or the shared Google Drive file URL."""
+    parsed = urlsplit((url or "").strip())
+    if parsed.scheme != "https":
+        raise VoiceCloneError("Utilise un lien https Google Drive ou Google Colab.")
+
+    notebook_id = ""
+    if parsed.netloc == "colab.research.google.com" and parsed.path.startswith("/drive/"):
+        notebook_id = parsed.path.removeprefix("/drive/").split("/", 1)[0]
+    elif parsed.netloc in {"drive.google.com", "www.drive.google.com"}:
+        marker = "/file/d/"
+        if parsed.path.startswith(marker):
+            notebook_id = parsed.path.removeprefix(marker).split("/", 1)[0]
+        else:
+            notebook_id = parse_qs(parsed.query).get("id", [""])[0]
+
+    if not notebook_id or not all(char.isalnum() or char in "_-" for char in notebook_id):
+        raise VoiceCloneError(
+            "Colle le lien du fichier notebook sur Google Drive, par exemple "
+            "https://drive.google.com/file/d/..."
+        )
+    return f"https://colab.research.google.com/drive/{notebook_id}"
+
+
 def save_colab_url(url: str) -> tuple[str, str]:
     global COLAB_URL
 
-    value = (url or "").strip()
-    parsed = urlsplit(value)
-    if (
-        parsed.scheme != "https"
-        or parsed.netloc != "colab.research.google.com"
-        or not parsed.path.startswith("/drive/")
-    ):
-        return (
-            "[ERREUR] Colle un lien Google Colab de la forme https://colab.research.google.com/drive/...",
-            _colab_link_html(COLAB_URL),
-        )
-
     try:
+        value = _normalize_notebook_url(url)
         raw = json.loads(DEFAULT_SETTINGS_PATH.read_text(encoding="utf-8-sig"))
         raw["colab_url"] = value
         temporary = DEFAULT_SETTINGS_PATH.with_suffix(".json.tmp")
@@ -730,7 +743,7 @@ def save_colab_url(url: str) -> tuple[str, str]:
         temporary.replace(DEFAULT_SETTINGS_PATH)
         SETTINGS.raw["colab_url"] = value
         COLAB_URL = value
-        return _ok("URL Colab enregistree."), _colab_link_html(value)
+        return _ok("Lien Drive converti et URL Colab enregistree."), _colab_link_html(value)
     except Exception as exc:
         return _format_exception(exc), _colab_link_html(COLAB_URL)
 
@@ -842,8 +855,11 @@ def build_ui(settings: Settings) -> gr.Blocks:
             interactive=False,
             lines=3,
         )
-        with gr.Accordion("URL Google Colab", open=False, elem_id="colab-url-config"):
-            colab_url_input = gr.Textbox(label="URL du notebook Colab", value=COLAB_URL)
+        with gr.Accordion("Notebook Google Drive", open=False, elem_id="colab-url-config"):
+            colab_url_input = gr.Textbox(
+                label="Lien du fichier notebook sur Google Drive",
+                value=COLAB_URL,
+            )
             with gr.Row():
                 save_colab_url_button = gr.Button("Enregistrer", variant="primary")
             colab_url_status = gr.Textbox(label="Etat URL Colab", interactive=False, lines=2)
