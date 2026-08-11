@@ -85,7 +85,10 @@ APP_CSS = """
     background: #ccfbf1 !important;
 }
 
-.vc-colab-config-button button {
+.vc-colab-config-link {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-height: 34px !important;
     padding: 7px 12px !important;
     border: 1px solid #7c3aed !important;
@@ -93,9 +96,10 @@ APP_CSS = """
     color: #5b21b6 !important;
     background: #f5f3ff !important;
     font-weight: 650 !important;
+    text-decoration: none !important;
 }
 
-.vc-colab-config-button button:hover {
+.vc-colab-config-link:hover {
     background: #ede9fe !important;
 }
 
@@ -712,15 +716,7 @@ def _colab_link_html(url: str) -> str:
     )
 
 
-def show_colab_config():
-    return gr.update(visible=True), COLAB_URL, ""
-
-
-def hide_colab_config():
-    return gr.update(visible=False), COLAB_URL, "[INFO] URL Colab inchangee."
-
-
-def save_colab_url(url: str) -> tuple[gr.Group, str, str]:
+def save_colab_url(url: str) -> tuple[str, str]:
     global COLAB_URL
 
     value = (url or "").strip()
@@ -731,7 +727,6 @@ def save_colab_url(url: str) -> tuple[gr.Group, str, str]:
         or not parsed.path.startswith("/drive/")
     ):
         return (
-            gr.update(visible=True),
             "[ERREUR] Colle un lien Google Colab de la forme https://colab.research.google.com/drive/...",
             _colab_link_html(COLAB_URL),
         )
@@ -744,9 +739,9 @@ def save_colab_url(url: str) -> tuple[gr.Group, str, str]:
         temporary.replace(DEFAULT_SETTINGS_PATH)
         SETTINGS.raw["colab_url"] = value
         COLAB_URL = value
-        return gr.update(visible=False), _ok("URL Colab enregistree."), _colab_link_html(value)
+        return _ok("URL Colab enregistree."), _colab_link_html(value)
     except Exception as exc:
-        return gr.update(visible=True), _format_exception(exc), _colab_link_html(COLAB_URL)
+        return _format_exception(exc), _colab_link_html(COLAB_URL)
 
 
 def show_main_page():
@@ -1028,9 +1023,9 @@ def build_ui(settings: Settings) -> gr.Blocks:
                 variant="stop",
                 elem_classes=["vc-danger-button"],
             )
-            colab_config_nav = gr.Button(
-                "Configurer URL Colab",
-                elem_classes=["vc-colab-config-button"],
+            gr.HTML(
+                '<a class="vc-colab-config-link" href="#colab-url-config">'
+                'Configurer URL Colab</a>'
             )
             colab_link = gr.HTML(_colab_link_html(COLAB_URL))
 
@@ -1040,12 +1035,10 @@ def build_ui(settings: Settings) -> gr.Blocks:
             interactive=False,
             lines=3,
         )
-        with gr.Group(visible=False) as colab_config_panel:
-            gr.Markdown("## URL Google Colab")
+        with gr.Accordion("URL Google Colab", open=False, elem_id="colab-url-config"):
             colab_url_input = gr.Textbox(label="URL du notebook Colab", value=COLAB_URL)
             with gr.Row():
                 save_colab_url_button = gr.Button("Enregistrer", variant="primary")
-                cancel_colab_url_button = gr.Button("Annuler")
             colab_url_status = gr.Textbox(label="Etat URL Colab", interactive=False, lines=2)
 
         with gr.Group(visible=False, elem_classes=["vc-danger-panel"]) as clear_cache_confirm:
@@ -1404,20 +1397,11 @@ def build_ui(settings: Settings) -> gr.Blocks:
                     queue=False,
                 )
 
-        colab_config_nav.click(
-            show_colab_config,
-            outputs=[colab_config_panel, colab_url_input, colab_url_status],
-            queue=False,
-        )
-        cancel_colab_url_button.click(
-            hide_colab_config,
-            outputs=[colab_config_panel, colab_url_input, colab_url_status],
-            queue=False,
-        )
         save_colab_url_button.click(
             save_colab_url,
             inputs=[colab_url_input],
-            outputs=[colab_config_panel, colab_url_status, colab_link],
+            outputs=[colab_url_status, colab_link],
+            queue=False,
         )
         home_nav.click(show_main_page, outputs=[main_page, local_tools_page])
         local_tools_nav.click(show_local_tools_page, outputs=[main_page, local_tools_page])
