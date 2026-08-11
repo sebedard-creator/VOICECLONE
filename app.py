@@ -964,6 +964,10 @@ def _build_ui_legacy(settings: Settings) -> gr.Blocks:
 
 
 def build_ui(settings: Settings) -> gr.Blocks:
+    # Populate the selector at startup so the normal conversion workflow does
+    # not begin with an empty model field.
+    initial_model_dropdown, initial_model_status = refresh_models_choices()
+
     with gr.Blocks(title="VOICECLONE-QC") as demo:
         with gr.Row(elem_classes=["vc-topbar"]):
             gr.HTML("<h1>VOICECLONE-QC</h1>")
@@ -1091,8 +1095,16 @@ def build_ui(settings: Settings) -> gr.Blocks:
             with gr.Group():
                 with gr.Row():
                     refresh_button = gr.Button("Rafraichir les modeles")
-                    model_dropdown = gr.Dropdown(label="Modele RVC (.pth)", choices=[])
-                model_status = gr.Textbox(label="Etat banque de voix", interactive=False)
+                    model_dropdown = gr.Dropdown(
+                        label="Modele RVC (.pth)",
+                        choices=initial_model_dropdown.choices,
+                        value=initial_model_dropdown.value,
+                    )
+                model_status = gr.Textbox(
+                    label="Etat banque de voix",
+                    value=initial_model_status,
+                    interactive=False,
+                )
                 guide_file = gr.File(label="Fichier guide WAV", file_count="single", type="filepath")
                 with gr.Row():
                     with gr.Column():
@@ -1381,7 +1393,7 @@ if __name__ == "__main__":
     ui.launch(
         server_name=SETTINGS.gradio.host,
         server_port=SETTINGS.gradio.port,
-        show_error=True,
+        show_error=False,
         # Only output folders need to be exposed to Gradio's file server.  The
         # project root also contains OAuth credentials and runtime settings.
         allowed_paths=[

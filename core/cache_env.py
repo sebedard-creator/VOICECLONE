@@ -29,12 +29,17 @@ def cache_dirs(settings: Settings) -> dict[str, Path]:
 
 
 def configure_cache_environment(settings: Settings) -> None:
-    _apply_cache_environment(os.environ, settings)
+    # The web server runs in the user's normal Windows profile. Replacing HOME,
+    # USERPROFILE or LOCALAPPDATA here can make unrelated libraries treat the
+    # application cache as a complete user profile.
+    _apply_cache_environment(os.environ, settings, isolate_legacy_home=False)
 
 
 def build_subprocess_env(settings: Settings, extra: dict[str, str] | None = None) -> dict[str, str]:
     env = os.environ.copy()
-    _apply_cache_environment(env, settings)
+    # Older audio tools can hard-code ~/.cache. Give only child processes an
+    # isolated home so those caches stay on the external VOICECLONE disk.
+    _apply_cache_environment(env, settings, isolate_legacy_home=True)
     env["PYTHONUNBUFFERED"] = "1"
     env["PYTHONIOENCODING"] = "utf-8"
     if extra:
@@ -42,7 +47,9 @@ def build_subprocess_env(settings: Settings, extra: dict[str, str] | None = None
     return env
 
 
-def _apply_cache_environment(env: dict[str, str], settings: Settings) -> None:
+def _apply_cache_environment(
+    env: dict[str, str], settings: Settings, *, isolate_legacy_home: bool
+) -> None:
     dirs = cache_dirs(settings)
     for path in dirs.values():
         path.mkdir(parents=True, exist_ok=True)
@@ -59,13 +66,14 @@ def _apply_cache_environment(env: dict[str, str], settings: Settings) -> None:
     env["MPLCONFIGDIR"] = str(dirs["matplotlib"])
     env["NUMBA_CACHE_DIR"] = str(dirs["numba"])
     env["PIP_CACHE_DIR"] = str(dirs["pip"])
-    env["LOCALAPPDATA"] = str(dirs["localappdata"])
     env["GRADIO_TEMP_DIR"] = str(dirs["gradio"])
     env["TEMP"] = str(dirs["tmp"])
     env["TMP"] = str(dirs["tmp"])
     env["KERAS_HOME"] = str(dirs["keras"])
     env["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 
-    # Some older packages, notably VoiceFixer, hard-code os.path.expanduser("~/.cache").
-    env["HOME"] = str(dirs["home"])
-    env["USERPROFILE"] = str(dirs["home"])
+    if isolate_legacy_home:
+        # Some older packages, notably VoiceFixer, hard-code
+        # os.path.expanduser("~/.cache").
+        env["HOME"] = str(dirs["home"])
+        env["USERPROFILE"] = str(dirs["home"])
