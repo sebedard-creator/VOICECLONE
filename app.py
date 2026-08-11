@@ -1382,7 +1382,12 @@ if __name__ == "__main__":
         server_name=SETTINGS.gradio.host,
         server_port=SETTINGS.gradio.port,
         show_error=True,
-        allowed_paths=[str(runtime_paths.root)],
+        # Only output folders need to be exposed to Gradio's file server.  The
+        # project root also contains OAuth credentials and runtime settings.
+        allowed_paths=[
+            str(runtime_paths.outputs),
+            str(runtime_paths.clean_only),
+        ],
         css=APP_CSS,
     )
 
