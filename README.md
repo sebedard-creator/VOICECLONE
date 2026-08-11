@@ -1,115 +1,87 @@
-# VOICECLONE-QC V1.0
+# VOICECLONE-QC
 
-Application Windows locale pour preparer des datasets de voix, synchroniser les
-artefacts avec Google Drive et lancer une conversion RVC via une interface
-Gradio.
+VOICECLONE-QC is a Windows-first local voice conversion workflow built around
+RVC (Retrieval-based Voice Conversion). It prepares voice datasets locally,
+uses Google Drive as a bridge to an external Google Colab training notebook,
+and runs local RMVPE voice conversion from a browser-based LAN interface.
 
-## Demarrage rapide
+The project prioritizes reproducible training, audio quality, and keeping
+private assets on the local machine.
 
-1. Installer Python 3.10 ou 3.11. Ces versions sont recommandees pour
-   PyTorch, Demucs et les repos RVC.
-2. Installer ffmpeg et verifier qu'il est disponible dans le `PATH`.
-3. Installer les dependances:
+## What It Does
 
-```powershell
-.\scripts\setup_windows.bat
-```
+- Cleans voice datasets with Demucs and creates training-ready audio segments.
+- Provides a Split Only mode for source material that is already clean.
+- Uploads a Colab-ready `dataset/` ZIP to Google Drive.
+- Watches `RVC_Output` on Google Drive and imports matching `.pth` and `.index`
+  model pairs into the local model bank.
+- Runs local RVC conversion with RMVPE pitch extraction.
+- Produces 24-bit / 48 kHz WAV outputs.
+- Includes optional local, non-Colab audio tools for isolation, denoising, and
+  restoration.
+- Supports resumable Colab training with checkpoint backups stored on Google
+  Drive.
 
-Si tu utilises Python 3.11:
-
-```powershell
-.\scripts\setup_windows.bat -PythonVersion 3.11
-```
-
-4. Ajuster `config/settings.json` si le disque ou les ports changent.
-5. Lancer l'application:
-
-```powershell
-.\scripts\run_app.bat
-```
-
-L'interface est exposee sur `0.0.0.0:7860` par defaut, donc accessible depuis
-le LAN avec l'adresse IP de ce PC.
-
-## Racine de donnees
-
-La racine runtime par defaut est:
+## Architecture
 
 ```text
-Y:\VOICECLONE
+Local audio files
+  -> VOICECLONE-QC preprocessing
+  -> Google Drive dataset ZIP
+  -> Google Colab RVC training
+  -> Google Drive RVC_Output
+  -> Local models_bank
+  -> Local RVC conversion
 ```
 
-Au lancement ou lors d'une operation, l'application verifie que le disque
-existe. Si `Y:` est deconnecte, elle leve une erreur explicite au lieu de
-continuer dans un mauvais dossier.
+## Requirements
 
-La structure creee sous la racine est:
+- Windows 10 or 11
+- Python 3.11
+- FFmpeg available on `PATH`
+- Google Drive access and an OAuth client configured for the application
+- An NVIDIA GPU is optional for local conversion; the application also supports
+  CPU execution
+- A Google Colab runtime for RVC model training
 
-```text
-Y:\VOICECLONE\
-├── config\
-├── dataset_cleaned\
-├── models_bank\
-├── outputs\
-├── staging\
-└── temp\
-```
+## Setup
 
-## Google Drive
+1. Clone the repository into the intended local project directory.
+2. Create the Python environment using the setup script in `scripts/`.
+3. Copy `config/settings.example.json` to `config/settings.json` and configure
+   local paths and Google Drive OAuth settings.
+4. Keep OAuth credentials, tokens, trained models, audio files, and runtime
+   downloads outside Git. The provided `.gitignore` is designed for this.
+5. Start the application with `scripts/run_app.bat`.
+6. Open the local web interface at `http://localhost:7860/`.
 
-Placer la cle du service account dans:
+## Colab Workflow
 
-```text
-Y:\VOICECLONE\config\service_account.json
-```
+The included `VOICECLONE_QC_RVC_Bridge.ipynb` is a reproducible training bridge.
+Run the Google Drive mount cell immediately after its configuration cell to
+authorize Drive before the longer dependency and model-download steps begin.
 
-Puis renseigner dans `config/settings.json`:
+For a new model, run the notebook from top to bottom. For a stopped training
+session, set `RUN_MODE` to `resume`; the notebook restores the experiment and
+checkpoint backup from Google Drive before continuing toward the configured
+total epoch count.
 
-- `google_drive.upload_folder_id`
-- `google_drive.return_folder_id` ou laisser `google_drive.return_folder_name`
-  a `RVC_Output`
+## Security and Privacy
 
-## Compatibilite Colab
+Do not commit the contents of `config/settings.json`, OAuth client files,
+OAuth tokens, service-account credentials, trained models, audio datasets, or
+generated outputs. These are intentionally ignored by Git.
 
-La version 1.01 agit comme un pont de fichiers avec Colab. Le ZIP uploade sur
-Drive contient directement:
+The Gradio interface can be exposed on a LAN. Only grant access to trusted
+users and networks. Use voice data and trained models only with the necessary
+permission from the voice owner.
 
-```text
-dataset/
-├── segment_001.wav
-├── segment_002.wav
-└── README.txt
-```
+## Project Notes
 
-Le watchdog scanne le dossier Drive `RVC_Output/` toutes les 30 secondes par
-defaut. Quand il trouve un couple `.pth` et `.index` dont le nom contient le
-nom du comedien, il les rapatrie dans `models_bank/`.
+This is a practical local workflow rather than a hosted service. Training is
+performed externally in Google Colab; VOICECLONE-QC does not automate or
+control the Colab user interface.
 
-Un fichier `README.txt` est aussi genere automatiquement dans `Y:\VOICECLONE`
-pour rappeler le type de notebook Colab a utiliser.
+The code and user interface are currently in French.
 
-## RVC
-
-La V1 fournit un adaptateur configurable. Renseigner `rvc.command_template`
-dans `config/settings.json` pour brancher le repo RVC choisi.
-
-Variables disponibles dans le template:
-
-- `{model_path}`
-- `{index_path}`
-- `{input_path}`
-- `{output_path}`
-- `{f0_method}`
-- `{device}`
-- `{transpose}`
-- `{index_rate}`
-- `{protect}`
-
-Exemple schematique:
-
-```json
-"command_template": "python infer_cli.py --model \"{model_path}\" --index \"{index_path}\" --input \"{input_path}\" --output \"{output_path}\" --f0_method {f0_method}"
-```
-
-L'application force `f0_method=rmvpe` par defaut et vide le cache CUDA apres
-chaque conversion quand PyTorch est disponible.
+Conçu par Sébastien Bédard
