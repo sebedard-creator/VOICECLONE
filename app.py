@@ -3,8 +3,10 @@
 import json
 import shutil
 import traceback
+from html import escape
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 import gradio as gr
 
@@ -36,7 +38,7 @@ from core.task_queue import TASK_GATE
 ensure_default_settings_file(DEFAULT_SETTINGS_PATH)
 SETTINGS = load_settings(DEFAULT_SETTINGS_PATH)
 configure_cache_environment(SETTINGS)
-COLAB_URL = "https://colab.research.google.com/drive/1aDEnG2W3t0cJo2P-IMoOie8cyy9jIBZf"
+COLAB_URL = str(SETTINGS.raw["colab_url"])
 
 APP_CSS = """
 .vc-topbar {
@@ -83,7 +85,7 @@ APP_CSS = """
     background: #ccfbf1 !important;
 }
 
-.vc-notify-button button {
+.vc-colab-config-button button {
     min-height: 34px !important;
     padding: 7px 12px !important;
     border: 1px solid #7c3aed !important;
@@ -93,7 +95,7 @@ APP_CSS = """
     font-weight: 650 !important;
 }
 
-.vc-notify-button button:hover {
+.vc-colab-config-button button:hover {
     background: #ede9fe !important;
 }
 
@@ -702,6 +704,51 @@ def settings_as_json() -> str:
     return json.dumps(SETTINGS.raw, indent=2, ensure_ascii=False)
 
 
+def _colab_link_html(url: str) -> str:
+    safe_url = escape(url, quote=True)
+    return (
+        f'<a class="vc-colab-link" href="{safe_url}" target="_blank" '
+        'rel="noopener noreferrer">Ouvrir Colab</a>'
+    )
+
+
+def show_colab_config():
+    return gr.update(visible=True), COLAB_URL, ""
+
+
+def hide_colab_config():
+    return gr.update(visible=False), COLAB_URL, "[INFO] URL Colab inchangee."
+
+
+def save_colab_url(url: str) -> tuple[gr.Group, str, str]:
+    global COLAB_URL
+
+    value = (url or "").strip()
+    parsed = urlsplit(value)
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != "colab.research.google.com"
+        or not parsed.path.startswith("/drive/")
+    ):
+        return (
+            gr.update(visible=True),
+            "[ERREUR] Colle un lien Google Colab de la forme https://colab.research.google.com/drive/...",
+            _colab_link_html(COLAB_URL),
+        )
+
+    try:
+        raw = json.loads(DEFAULT_SETTINGS_PATH.read_text(encoding="utf-8-sig"))
+        raw["colab_url"] = value
+        temporary = DEFAULT_SETTINGS_PATH.with_suffix(".json.tmp")
+        temporary.write_text(json.dumps(raw, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        temporary.replace(DEFAULT_SETTINGS_PATH)
+        SETTINGS.raw["colab_url"] = value
+        COLAB_URL = value
+        return gr.update(visible=False), _ok("URL Colab enregistree."), _colab_link_html(value)
+    except Exception as exc:
+        return gr.update(visible=True), _format_exception(exc), _colab_link_html(COLAB_URL)
+
+
 def show_main_page():
     return gr.update(visible=True), gr.update(visible=False)
 
@@ -981,17 +1028,11 @@ def build_ui(settings: Settings) -> gr.Blocks:
                 variant="stop",
                 elem_classes=["vc-danger-button"],
             )
-            notify_nav = gr.Button(
-                "Activer notifications",
-                elem_classes=["vc-notify-button"],
+            colab_config_nav = gr.Button(
+                "Configurer URL Colab",
+                elem_classes=["vc-colab-config-button"],
             )
-            gr.HTML(
-                f"""
-                <a class="vc-colab-link" href="{COLAB_URL}" target="_blank" rel="noopener noreferrer">
-                    Ouvrir Colab
-                </a>
-                """
-            )
+            colab_link = gr.HTML(_colab_link_html(COLAB_URL))
 
         startup_status = gr.Textbox(
             label="Etat runtime",
@@ -999,12 +1040,13 @@ def build_ui(settings: Settings) -> gr.Blocks:
             interactive=False,
             lines=3,
         )
-        notification_status = gr.Textbox(
-            label="Notifications",
-            value="Clique sur Activer notifications pour autoriser les alertes visuelles et sonores.",
-            interactive=False,
-            lines=1,
-        )
+        with gr.Group(visible=False) as colab_config_panel:
+            gr.Markdown("## URL Google Colab")
+            colab_url_input = gr.Textbox(label="URL du notebook Colab", value=COLAB_URL)
+            with gr.Row():
+                save_colab_url_button = gr.Button("Enregistrer", variant="primary")
+                cancel_colab_url_button = gr.Button("Annuler")
+            colab_url_status = gr.Textbox(label="Etat URL Colab", interactive=False, lines=2)
 
         with gr.Group(visible=False, elem_classes=["vc-danger-panel"]) as clear_cache_confirm:
             gr.Markdown(
@@ -1362,11 +1404,20 @@ def build_ui(settings: Settings) -> gr.Blocks:
                     queue=False,
                 )
 
-        notify_nav.click(
-            fn=None,
-            outputs=notification_status,
-            js=NOTIFICATION_ENABLE_JS,
+        colab_config_nav.click(
+            show_colab_config,
+            outputs=[colab_config_panel, colab_url_input, colab_url_status],
             queue=False,
+        )
+        cancel_colab_url_button.click(
+            hide_colab_config,
+            outputs=[colab_config_panel, colab_url_input, colab_url_status],
+            queue=False,
+        )
+        save_colab_url_button.click(
+            save_colab_url,
+            inputs=[colab_url_input],
+            outputs=[colab_config_panel, colab_url_status, colab_link],
         )
         home_nav.click(show_main_page, outputs=[main_page, local_tools_page])
         local_tools_nav.click(show_local_tools_page, outputs=[main_page, local_tools_page])

@@ -14,6 +14,7 @@ DEFAULT_SETTINGS_PATH = PROJECT_DIR / "config" / "settings.json"
 
 DEFAULT_SETTINGS: dict[str, Any] = {
     "root_path": r"Y:\VOICECLONE",
+    "colab_url": "https://colab.research.google.com/drive/1aDEnG2W3t0cJo2P-IMoOie8cyy9jIBZf",
     "gradio": {"host": "0.0.0.0", "port": 7860},
     "audio": {
         "sample_rate": 48000,

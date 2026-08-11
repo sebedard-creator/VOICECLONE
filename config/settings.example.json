@@ -1,5 +1,6 @@
 {
   "root_path": "Y:\\VOICECLONE",
+  "colab_url": "https://colab.research.google.com/drive/REMPLACE_PAR_L_ID_DU_NOTEBOOK",
   "gradio": {
     "host": "0.0.0.0",
     "port": 7860
