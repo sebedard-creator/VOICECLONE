@@ -20,7 +20,6 @@ def cache_dirs(settings: Settings) -> dict[str, Path]:
         "xdg": cache_root / "xdg",
         "matplotlib": cache_root / "matplotlib",
         "numba": cache_root / "numba",
-        "localappdata": cache_root / "localappdata",
         "pip": cache_root / "pip",
         "gradio": cache_root / "gradio",
         "tmp": cache_root / "tmp",
