@@ -49,10 +49,10 @@ def main() -> None:
     old = notebook["cells"]
 
     config = code(
-        '''#@title 1. Configuration VOICECLONE-QC v1.2.3
+        '''#@title 1. Configuration VOICECLONE-QC v1.2.4
 from pathlib import Path
 
-NOTEBOOK_VERSION = "1.2.3"
+NOTEBOOK_VERSION = "1.2.4"
 MODEL_NAME = "Alertes_Stephanie"  #@param {type:"string"}
 RUN_MODE = "new"  #@param ["new", "resume"]
 TARGET_SAMPLE_RATE = "40k"
@@ -461,16 +461,28 @@ print("Training complete and fully backed up to Drive.")'''
 
     export = code(
         '''#@title 16. Export model and index to RVC_Output
+import glob
 import shutil
 from datetime import datetime
 
-log_dir = Path(EXP_DIR)
-model_files = sorted(log_dir.glob("*.pth"), key=lambda item: item.stat().st_mtime)
-index_files = sorted(log_dir.glob("*.index"), key=lambda item: item.stat().st_mtime)
-if not model_files or not index_files:
-    raise FileNotFoundError("Model .pth or .index is missing. Run training and index creation first.")
+# RVC writes its final, inference-ready model to weights/. The G_*.pth and
+# D_*.pth files in logs/ are training checkpoints and must not be exported.
+weight_candidates = [Path(NOW_DIR) / "weights" / f"{MODEL_NAME}.pth"]
+weight_candidates += [
+    Path(path) for path in glob.glob(f"{NOW_DIR}/weights/{MODEL_NAME}_*.pth")
+]
+weight_candidates = [path for path in weight_candidates if path.exists()]
+if not weight_candidates:
+    raise FileNotFoundError(
+        "No final .pth file found in weights/. Complete the training cell first."
+    )
 
-source_model, source_index = model_files[-1], index_files[-1]
+index_candidates = [Path(path) for path in glob.glob(f"{EXP_DIR}/added_*.index")]
+if not index_candidates:
+    raise FileNotFoundError("No added_*.index file found. Run the index cell first.")
+
+source_model = max(weight_candidates, key=lambda item: item.stat().st_mtime)
+source_index = max(index_candidates, key=lambda item: item.stat().st_mtime)
 destination_model = Path(DRIVE_OUTPUT_DIR) / f"{MODEL_NAME}.pth"
 destination_index = Path(DRIVE_OUTPUT_DIR) / f"{MODEL_NAME}.index"
 if destination_model.exists() or destination_index.exists():
@@ -485,8 +497,8 @@ shutil.copy2(source_model, destination_model)
 shutil.copy2(source_index, destination_index)
 if destination_model.stat().st_size == 0 or destination_index.stat().st_size == 0:
     raise RuntimeError("Export verification failed: an output file is empty.")
-print(f"Exported: {destination_model}")
-print(f"Exported: {destination_index}")'''
+print(f"Exported model: {destination_model}")
+print(f"Exported index: {destination_index}")'''
     )
 
     cells = [
