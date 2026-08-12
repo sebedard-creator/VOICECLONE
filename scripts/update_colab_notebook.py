@@ -49,10 +49,10 @@ def main() -> None:
     old = notebook["cells"]
 
     config = code(
-        '''#@title 1. Configuration VOICECLONE-QC v1.2.2
+        '''#@title 1. Configuration VOICECLONE-QC v1.2.3
 from pathlib import Path
 
-NOTEBOOK_VERSION = "1.2.2"
+NOTEBOOK_VERSION = "1.2.3"
 MODEL_NAME = "Alertes_Stephanie"  #@param {type:"string"}
 RUN_MODE = "new"  #@param ["new", "resume"]
 TARGET_SAMPLE_RATE = "40k"
@@ -116,8 +116,13 @@ print("Google Drive is ready. You can now leave Colab to continue the setup.")''
 
     dependencies = code(
         '''#@title 3. Install Dependencies (Colab Python 3.12 compatible)
+import os
 import subprocess
 import sys
+
+# A failed/restarted repository cell can leave the process in a deleted folder.
+# pip calls os.getcwd(), so always restore a valid Colab working directory first.
+os.chdir("/content")
 
 system_packages = ["build-essential", "python3-dev", "ffmpeg", "aria2"]
 python_packages = [
@@ -186,6 +191,9 @@ import os
 import shutil
 import subprocess
 import zipfile
+
+# Never delete a repository while Python is still using it as the current path.
+os.chdir("/content")
 
 def download_github_archive(repository, revision, destination):
     archive_path = Path("/content") / f"{destination.name}-{revision[:12]}.zip"
