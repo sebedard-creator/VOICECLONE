@@ -49,9 +49,10 @@ def main() -> None:
     old = notebook["cells"]
 
     config = code(
-        '''#@title 1. Configuration VOICECLONE-QC
+        '''#@title 1. Configuration VOICECLONE-QC v1.2.0
 from pathlib import Path
 
+NOTEBOOK_VERSION = "1.2.0"
 MODEL_NAME = "Alertes_Stephanie"  #@param {type:"string"}
 RUN_MODE = "new"  #@param ["new", "resume"]
 TARGET_SAMPLE_RATE = "40k"
@@ -91,7 +92,10 @@ if PITCH_METHOD != "rmvpe":
 if TOTAL_EPOCHS < 1 or SAVE_FREQUENCY < 1 or BATCH_SIZE < 1:
     raise ValueError("Training values must be positive integers.")
 
-print(f"Model: {MODEL_NAME} | mode: {RUN_MODE} | target epochs: {TOTAL_EPOCHS}")'''
+print(
+    f"VOICECLONE-QC RVC Bridge v{NOTEBOOK_VERSION} | "
+    f"Model: {MODEL_NAME} | mode: {RUN_MODE} | target epochs: {TOTAL_EPOCHS}"
+)'''
     )
 
     mount_drive = code(
