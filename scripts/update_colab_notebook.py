@@ -49,10 +49,10 @@ def main() -> None:
     old = notebook["cells"]
 
     config = code(
-        '''#@title 1. Configuration VOICECLONE-QC v1.2.0
+        '''#@title 1. Configuration VOICECLONE-QC v1.2.1
 from pathlib import Path
 
-NOTEBOOK_VERSION = "1.2.0"
+NOTEBOOK_VERSION = "1.2.1"
 MODEL_NAME = "Alertes_Stephanie"  #@param {type:"string"}
 RUN_MODE = "new"  #@param ["new", "resume"]
 TARGET_SAMPLE_RATE = "40k"
@@ -115,29 +115,49 @@ print("Google Drive is ready. You can now leave Colab to continue the setup.")''
     )
 
     clone = code(
-        '''#@title 4. Clone RVC Repository (pinned)
+        '''#@title 4. Download RVC Source Code (pinned)
 import os
 import shutil
 import subprocess
+import zipfile
+
+def download_github_archive(repository, revision, destination):
+    archive_path = Path("/content") / f"{destination.name}-{revision[:12]}.zip"
+    extract_dir = Path("/content") / f"{destination.name}-{revision[:12]}-extract"
+    for path in (destination, archive_path, extract_dir):
+        if path.exists():
+            shutil.rmtree(path) if path.is_dir() else path.unlink()
+
+    url = f"https://github.com/{repository}/archive/{revision}.zip"
+    completed = subprocess.run(
+        [
+            "curl", "--fail", "--location", "--retry", "5", "--retry-all-errors",
+            "--connect-timeout", "30", "--output", str(archive_path), url,
+        ],
+        capture_output=True,
+        text=True,
+    )
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"Unable to download {repository} at {revision[:12]}.\\n"
+            f"curl output:\\n{completed.stderr or completed.stdout}"
+        )
+    with zipfile.ZipFile(archive_path, "r") as archive:
+        archive.extractall(extract_dir)
+    source_dirs = [path for path in extract_dir.iterdir() if path.is_dir()]
+    if len(source_dirs) != 1:
+        raise RuntimeError(f"Unexpected archive layout for {repository}: {source_dirs}")
+    shutil.move(str(source_dirs[0]), str(destination))
+    archive_path.unlink()
+    shutil.rmtree(extract_dir)
 
 repo_dir = Path("/content/Mangio-RVC-Fork")
-if repo_dir.exists():
-    shutil.rmtree(repo_dir)
 torchcrepe_dir = Path("/content/torchcrepe")
-if torchcrepe_dir.exists():
-    shutil.rmtree(torchcrepe_dir)
-
-subprocess.check_call([
-    "git", "clone", "https://github.com/Mangio621/Mangio-RVC-Fork.git", str(repo_dir)
-])
-subprocess.check_call(["git", "-C", str(repo_dir), "checkout", RVC_REPOSITORY_COMMIT])
-subprocess.check_call([
-    "git", "clone", "https://github.com/maxrmorrison/torchcrepe.git", str(torchcrepe_dir)
-])
-subprocess.check_call(["git", "-C", str(torchcrepe_dir), "checkout", TORCHCREPE_COMMIT])
+download_github_archive("Mangio621/Mangio-RVC-Fork", RVC_REPOSITORY_COMMIT, repo_dir)
+download_github_archive("maxrmorrison/torchcrepe", TORCHCREPE_COMMIT, torchcrepe_dir)
 shutil.copytree(torchcrepe_dir / "torchcrepe", repo_dir / "torchcrepe", dirs_exist_ok=True)
 os.chdir(repo_dir)
-print(f"Repository ready: {repo_dir} @ {RVC_REPOSITORY_COMMIT[:12]}")'''
+print(f"RVC source ready: {repo_dir} @ {RVC_REPOSITORY_COMMIT[:12]}")'''
     )
 
     download_models = code(
