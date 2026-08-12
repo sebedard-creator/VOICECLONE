@@ -49,10 +49,10 @@ def main() -> None:
     old = notebook["cells"]
 
     config = code(
-        '''#@title 1. Configuration VOICECLONE-QC v1.2.5
+        '''#@title 1. Configuration VOICECLONE-QC v1.2.6
 from pathlib import Path
 
-NOTEBOOK_VERSION = "1.2.5"
+NOTEBOOK_VERSION = "1.2.6"
 MODEL_NAME = "Alertes_Stephanie"  #@param {type:"string"}
 RUN_MODE = "new"  #@param ["new", "resume"]
 TARGET_SAMPLE_RATE = "40k"
@@ -425,11 +425,56 @@ else:
 
     train = code(
         '''#@title 14. Train RVC Model with automatic checkpoint backups
+import math
 import os
 import subprocess
 import time
+from random import shuffle
 
 os.chdir(NOW_DIR)
+# Build the exact RVC file list expected by train_nsf_sim_cache_sid_load_pretrain.py.
+# This must happen after preprocessing and feature extraction.
+gt_wavs_dir = f"{EXP_DIR}/0_gt_wavs"
+feature_dir = f"{EXP_DIR}/3_feature768"
+f0_dir = f"{EXP_DIR}/2a_f0"
+f0nsf_dir = f"{EXP_DIR}/2b-f0nsf"
+required_dirs = [gt_wavs_dir, feature_dir, f0_dir, f0nsf_dir]
+missing_dirs = [path for path in required_dirs if not Path(path).is_dir()]
+if missing_dirs:
+    raise FileNotFoundError(
+        "Training data is incomplete. Run preprocessing and RMVPE feature extraction first.\\n"
+        + "\\n".join(missing_dirs)
+    )
+
+speaker_id = 0
+names = (
+    {name.split(".")[0] for name in os.listdir(gt_wavs_dir)}
+    & {name.split(".")[0] for name in os.listdir(feature_dir)}
+    & {name.split(".")[0] for name in os.listdir(f0_dir)}
+    & {name.split(".")[0] for name in os.listdir(f0nsf_dir)}
+)
+if not names:
+    raise RuntimeError("No matching WAV, feature, F0, and F0NSF files were found for training.")
+
+filelist = [
+    f"{gt_wavs_dir}/{name}.wav|{feature_dir}/{name}.npy|"
+    f"{f0_dir}/{name}.wav.npy|{f0nsf_dir}/{name}.wav.npy|{speaker_id}"
+    for name in names
+]
+for _ in range(2):
+    filelist.append(
+        f"{NOW_DIR}/logs/mute/0_gt_wavs/mute40k.wav|"
+        f"{NOW_DIR}/logs/mute/3_feature768/mute.npy|"
+        f"{NOW_DIR}/logs/mute/2a_f0/mute.wav.npy|"
+        f"{NOW_DIR}/logs/mute/2b-f0nsf/mute.wav.npy|{speaker_id}"
+    )
+shuffle(filelist)
+filelist_path = Path(EXP_DIR) / "filelist.txt"
+filelist_path.write_text("\\n".join(filelist), encoding="utf-8")
+if filelist_path.stat().st_size == 0:
+    raise RuntimeError("filelist.txt was created empty; training was not started.")
+print(f"Filelist written: {len(filelist)} items -> {filelist_path}")
+
 sync_checkpoints_to_drive()
 environment = os.environ.copy()
 environment["PYTHONPATH"] = f"{NOW_DIR}:{environment.get('PYTHONPATH', '')}"
@@ -446,15 +491,21 @@ process = subprocess.Popen(
     text=True, bufsize=1, env=environment,
 )
 last_sync = time.monotonic()
+saw_traceback = False
 for line in process.stdout:
     print(line, end="")
+    if "Traceback (most recent call last):" in line:
+        saw_traceback = True
     if time.monotonic() - last_sync >= CHECKPOINT_SYNC_SECONDS:
         sync_checkpoints_to_drive()
         last_sync = time.monotonic()
 exit_code = process.wait()
 sync_checkpoints_to_drive()
-if exit_code != 0:
-    raise RuntimeError(f"Training stopped with exit code {exit_code}. Checkpoints remain on Drive.")
+if exit_code != 0 or saw_traceback:
+    raise RuntimeError(
+        f"Training failed (exit code {exit_code}). Checkpoints remain on Drive. "
+        "Read the traceback printed above; do not proceed to index or export."
+    )
 sync_experiment_to_drive()
 print("Training complete and fully backed up to Drive.")'''
     )
