@@ -49,10 +49,10 @@ def main() -> None:
     old = notebook["cells"]
 
     config = code(
-        '''#@title 1. Configuration VOICECLONE-QC v1.2.1
+        '''#@title 1. Configuration VOICECLONE-QC v1.2.2
 from pathlib import Path
 
-NOTEBOOK_VERSION = "1.2.1"
+NOTEBOOK_VERSION = "1.2.2"
 MODEL_NAME = "Alertes_Stephanie"  #@param {type:"string"}
 RUN_MODE = "new"  #@param ["new", "resume"]
 TARGET_SAMPLE_RATE = "40k"
@@ -112,6 +112,72 @@ for directory in (DRIVE_DATASET_DIR, DRIVE_OUTPUT_DIR, DRIVE_TRAINING_DIR, DRIVE
     Path(directory).mkdir(parents=True, exist_ok=True)
 
 print("Google Drive is ready. You can now leave Colab to continue the setup.")'''
+    )
+
+    dependencies = code(
+        '''#@title 3. Install Dependencies (Colab Python 3.12 compatible)
+import subprocess
+import sys
+
+system_packages = ["build-essential", "python3-dev", "ffmpeg", "aria2"]
+python_packages = [
+    "faiss-cpu",
+    "ffmpeg-python",
+    "praat-parselmouth",
+    "pyworld",
+    "numpy",
+    "numba",
+    "librosa",
+    "tensorboardX",
+    "tensorboard",
+    "onnx",
+    "onnxruntime-gpu",
+    "torchcrepe",
+    "python-dotenv",
+    "av",
+    "scikit-learn",
+]
+
+def run_command(command, label):
+    print(f"Installing: {label}", flush=True)
+    completed = subprocess.run(
+        command,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    if completed.stdout:
+        print(completed.stdout, end="")
+    if completed.returncode != 0:
+        raise RuntimeError(
+            f"INSTALLATION FAILED: {label} (exit code {completed.returncode})."
+        )
+
+print("Updating package list...", flush=True)
+run_command(["apt-get", "update", "-qq"], "system package list")
+
+for package in system_packages:
+    run_command(["apt-get", "install", "-qq", "-y", package], f"system package {package}")
+
+# Colab owns its system pip. Do not upgrade pip, setuptools, or wheel here.
+# The flag is required by the current Python 3.12 Debian environment.
+pip_prefix = [
+    sys.executable,
+    "-m",
+    "pip",
+    "install",
+    "--disable-pip-version-check",
+    "--no-input",
+    "--prefer-binary",
+    "--break-system-packages",
+    "--upgrade",
+]
+
+for package in python_packages:
+    run_command(pip_prefix + [package], f"Python package {package}")
+
+run_command(pip_prefix + ["fairseq-fixed"], "Python package fairseq-fixed")
+print("Dependencies ready.", flush=True)'''
     )
 
     clone = code(
@@ -419,7 +485,7 @@ print(f"Exported: {destination_index}")'''
         markdown("# VOICECLONE-QC RVC Bridge\n\nRun the Drive authorization cell immediately after configuration. This notebook is pinned to the validated RVC v2 / 40k / RMVPE pipeline and saves resumable checkpoints to Drive."),
         config,
         mount_drive,
-        title(old_cell(old, "Install Dependencies"), "3. Install Dependencies"),
+        dependencies,
         clone,
         title(old_cell(old, "GPU Check"), "5. GPU Check"),
         download_models,
