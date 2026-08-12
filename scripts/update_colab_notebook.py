@@ -67,7 +67,6 @@ CHECKPOINT_SYNC_SECONDS = 120  #@param {type:"integer"}
 RVC_REPOSITORY_COMMIT = "d618280cdef162c39bf74d03362592db5c41ad80"
 TORCHCREPE_COMMIT = "19e2ec3d494c0797a5ff2a11408ec5838fba6681"
 ORVC_REVISION = "425f8006582161af571e0d7f5ce646a535a14b65"
-RVC_ASSETS_REVISION = "7abd1e0c6cc8e640e1152703811ceeb2f9f355ca"
 
 DRIVE_DATASET_DIR = "/content/drive/MyDrive/VOICECLONE_Datasets"
 DRIVE_OUTPUT_DIR = "/content/drive/MyDrive/RVC_Output"
@@ -144,37 +143,53 @@ import json
 import subprocess
 
 assets = {
-    Path(NOW_DIR) / "pretrained_v2" / "f0G40k_OV2.pth":
+    Path(NOW_DIR) / "pretrained_v2" / "f0G40k_OV2.pth": [
         f"https://huggingface.co/ORVC/Ov2Super/resolve/{ORVC_REVISION}/f0Ov2Super40kG.pth",
-    Path(NOW_DIR) / "pretrained_v2" / "f0D40k_OV2.pth":
+        "https://huggingface.co/ORVC/Ov2Super/resolve/main/f0Ov2Super40kG.pth",
+    ],
+    Path(NOW_DIR) / "pretrained_v2" / "f0D40k_OV2.pth": [
         f"https://huggingface.co/ORVC/Ov2Super/resolve/{ORVC_REVISION}/f0Ov2Super40kD.pth",
-    Path(NOW_DIR) / "hubert_base.pt":
-        f"https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/{RVC_ASSETS_REVISION}/hubert_base.pt",
-    Path(NOW_DIR) / "rmvpe.pt":
-        f"https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/{RVC_ASSETS_REVISION}/rmvpe.pt",
-    Path(NOW_DIR) / "configs" / "40k.json":
-        f"https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/{RVC_ASSETS_REVISION}/configs/40k.json",
+        "https://huggingface.co/ORVC/Ov2Super/resolve/main/f0Ov2Super40kD.pth",
+    ],
+    Path(NOW_DIR) / "hubert_base.pt": [
+        "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/hubert_base.pt",
+    ],
+    Path(NOW_DIR) / "rmvpe.pt": [
+        "https://huggingface.co/lj1995/VoiceConversionWebUI/resolve/main/rmvpe.pt",
+    ],
+    Path(NOW_DIR) / "configs" / "40k.json": [
+        f"https://raw.githubusercontent.com/Mangio621/Mangio-RVC-Fork/{RVC_REPOSITORY_COMMIT}/configs/40k.json",
+    ],
 }
 
-def download_verified(destination, url):
+def download_verified(destination, urls):
     destination.parent.mkdir(parents=True, exist_ok=True)
     temporary = destination.with_suffix(destination.suffix + ".part")
-    if temporary.exists():
-        temporary.unlink()
-    subprocess.check_call([
-        "curl", "--fail", "--location", "--retry", "5", "--retry-all-errors",
-        "--connect-timeout", "30", "--output", str(temporary), url,
-    ])
-    if temporary.stat().st_size < 100:
-        raise RuntimeError(f"Downloaded file is unexpectedly small: {destination.name}")
-    temporary.replace(destination)
-    return hashlib.sha256(destination.read_bytes()).hexdigest()
+    failures = []
+    for url in urls:
+        if temporary.exists():
+            temporary.unlink()
+        try:
+            subprocess.check_call([
+                "curl", "--fail", "--location", "--retry", "5", "--retry-all-errors",
+                "--connect-timeout", "30", "--output", str(temporary), url,
+            ])
+            if temporary.stat().st_size < 100:
+                raise RuntimeError("downloaded file is unexpectedly small")
+            temporary.replace(destination)
+            return url, hashlib.sha256(destination.read_bytes()).hexdigest()
+        except Exception as error:
+            failures.append(f"{url}: {error}")
+    raise RuntimeError(
+        f"Unable to download {destination.name}. Tried:\n" + "\n".join(failures)
+    )
 
 manifest = {}
-for destination, url in assets.items():
+for destination, urls in assets.items():
+    used_url, checksum = download_verified(destination, urls)
     manifest[str(destination.relative_to(NOW_DIR))] = {
-        "url": url,
-        "sha256": download_verified(destination, url),
+        "url": used_url,
+        "sha256": checksum,
         "bytes": destination.stat().st_size,
     }
 
