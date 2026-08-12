@@ -49,10 +49,10 @@ def main() -> None:
     old = notebook["cells"]
 
     config = code(
-        '''#@title 1. Configuration VOICECLONE-QC v1.2.4
+        '''#@title 1. Configuration VOICECLONE-QC v1.2.5
 from pathlib import Path
 
-NOTEBOOK_VERSION = "1.2.4"
+NOTEBOOK_VERSION = "1.2.5"
 MODEL_NAME = "Alertes_Stephanie"  #@param {type:"string"}
 RUN_MODE = "new"  #@param ["new", "resume"]
 TARGET_SAMPLE_RATE = "40k"
@@ -462,20 +462,46 @@ print("Training complete and fully backed up to Drive.")'''
     export = code(
         '''#@title 16. Export model and index to RVC_Output
 import glob
+import os
 import shutil
 from datetime import datetime
 
 # RVC writes its final, inference-ready model to weights/. The G_*.pth and
-# D_*.pth files in logs/ are training checkpoints and must not be exported.
+# D_*.pth files in logs/ are training checkpoints and must not be copied as the
+# final model. Some Mangio RVC runs need the official extractor called here.
+weights_dir = Path(NOW_DIR) / "weights"
+weights_dir.mkdir(parents=True, exist_ok=True)
+expected_weight = weights_dir / f"{MODEL_NAME}.pth"
 weight_candidates = [Path(NOW_DIR) / "weights" / f"{MODEL_NAME}.pth"]
 weight_candidates += [
     Path(path) for path in glob.glob(f"{NOW_DIR}/weights/{MODEL_NAME}_*.pth")
 ]
 weight_candidates = [path for path in weight_candidates if path.exists()]
 if not weight_candidates:
-    raise FileNotFoundError(
-        "No final .pth file found in weights/. Complete the training cell first."
+    checkpoint_candidates = [Path(path) for path in glob.glob(f"{EXP_DIR}/G_*.pth")]
+    if not checkpoint_candidates:
+        raise FileNotFoundError(
+            "No G_*.pth training checkpoint found. Complete the training cell first."
+        )
+    latest_checkpoint = max(checkpoint_candidates, key=lambda item: item.stat().st_mtime)
+    os.chdir(NOW_DIR)
+    from train.process_ckpt import extract_small_model
+
+    extraction_result = extract_small_model(
+        str(latest_checkpoint),
+        MODEL_NAME,
+        "40k",
+        1,
+        f"VOICECLONE-QC export from {latest_checkpoint.name}",
+        "v2",
     )
+    if extraction_result != "Success." or not expected_weight.exists():
+        raise RuntimeError(
+            "Unable to create the final inference model from the latest G checkpoint: "
+            f"{extraction_result}"
+        )
+    weight_candidates = [expected_weight]
+    print(f"Final inference model created from: {latest_checkpoint}")
 
 index_candidates = [Path(path) for path in glob.glob(f"{EXP_DIR}/added_*.index")]
 if not index_candidates:
