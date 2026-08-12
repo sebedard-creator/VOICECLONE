@@ -17,10 +17,54 @@ private assets on the local machine.
   model pairs into the local model bank.
 - Runs local RVC conversion with RMVPE pitch extraction.
 - Produces 24-bit / 48 kHz WAV outputs.
-- Includes optional local, non-Colab audio tools for isolation, denoising, and
-  restoration.
+- Includes a local audio toolbox for isolation, denoising, and restoration.
 - Supports resumable Colab training with checkpoint backups stored on Google
   Drive.
+- Provides visual progress feedback and completion alerts for long-running
+  local tasks.
+
+## Local Audio Toolbox
+
+The **Non-Colab Features** page contains independent local processors. These
+tools do not require a Google Colab training session and do not modify the RVC
+model bank.
+
+### Dataset Preparation
+
+- **Demucs dataset cleaning:** isolates vocals before automatic slicing,
+  normalization, and dataset export.
+- **Split Only:** skips Demucs while retaining the automatic slicing and export
+  workflow for sources that are already clean.
+
+### Standalone Processing
+
+- **Demucs vocal isolation:** produces a voice-focused file without slicing.
+  Its quality control trades processing time for additional separation
+  passes.
+- **DeepFilterNet:** applies adjustable-strength speech denoising for a faster,
+  alternative cleanup pass.
+- **UVR:** offers an alternative vocal-isolation pipeline and selectable source
+  separation models, with a separate quality/speed control.
+- **Resemble Enhance:** performs high-fidelity generative audio restoration.
+  Solver selection and reconstruction quality allow slower, more careful
+  restoration when required.
+- **VoiceFixer:** restores degraded vocal recordings through selectable
+  restoration modes.
+
+Each processor writes a separately named WAV output, keeps the original input
+unchanged, and shows an active processing indicator while the task runs.
+
+## Local Workflow Controls
+
+- A single-task queue prevents multiple heavy audio operations from competing
+  for the same machine resources.
+- The RVC conversion controls expose pitch transposition, index influence, and
+  consonant/breath protection, while RMVPE remains the selected F0 method.
+- The local model bank can be refreshed from the interface after Drive imports.
+- The Colab notebook URL can be configured from the interface with either a
+  Google Drive notebook file link or a direct Colab link.
+- Transient folders can be cleared without deleting trained models, credentials,
+  runtimes, or application settings.
 
 ## Architecture
 
