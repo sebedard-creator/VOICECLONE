@@ -181,7 +181,7 @@ def download_verified(destination, urls):
         except Exception as error:
             failures.append(f"{url}: {error}")
     raise RuntimeError(
-        f"Unable to download {destination.name}. Tried:\n" + "\n".join(failures)
+        f"Unable to download {destination.name}. Tried:\\n" + "\\n".join(failures)
     )
 
 manifest = {}
