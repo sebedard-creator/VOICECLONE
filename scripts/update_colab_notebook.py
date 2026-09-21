@@ -49,10 +49,10 @@ def main() -> None:
     old = notebook["cells"]
 
     config = code(
-        '''#@title 1. Configuration VOICECLONE-QC v1.2.6
+        '''#@title 1. Configuration VOICECLONE-QC v1.3.0
 from pathlib import Path
 
-NOTEBOOK_VERSION = "1.2.6"
+NOTEBOOK_VERSION = "1.3.0"
 MODEL_NAME = "Alertes_Stephanie"  #@param {type:"string"}
 RUN_MODE = "new"  #@param ["new", "resume"]
 TARGET_SAMPLE_RATE = "40k"
@@ -83,6 +83,11 @@ DATASET_DIR = f"/content/voiceclone_qc/{MODEL_NAME}/dataset"
 
 if not MODEL_NAME.strip():
     raise ValueError("MODEL_NAME cannot be empty.")
+import re
+if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", MODEL_NAME) or MODEL_NAME.endswith("."):
+    raise ValueError("Use the same portable model name as the local application (letters, digits, _, -, .).")
+TRAINING_COMPLETE = False
+EXPORT_COMPLETE = False
 if RUN_MODE not in {"new", "resume"}:
     raise ValueError("RUN_MODE must be 'new' or 'resume'.")
 if (TARGET_SAMPLE_RATE, MODEL_ARCHITECTURE, PRETRAIN_TYPE) != ("40k", "v2", "OV2"):
@@ -301,19 +306,17 @@ print(f"Verified {len(manifest)} assets: {manifest_path}")'''
 import shutil
 
 local_experiment = Path(EXP_DIR)
+checkpoint_store = CheckpointStore(DRIVE_RUN_DIR)
 if RUN_MODE == "resume":
-    if not DRIVE_EXPERIMENT_DIR.exists():
-        raise FileNotFoundError(
-            f"No Drive checkpoint backup found for {MODEL_NAME}: {DRIVE_EXPERIMENT_DIR}"
-        )
-    if local_experiment.exists():
-        shutil.rmtree(local_experiment)
-    shutil.copytree(DRIVE_EXPERIMENT_DIR, local_experiment)
-    print(f"Restored experiment: {DRIVE_EXPERIMENT_DIR} -> {local_experiment}")
+    restored_epoch = checkpoint_store.restore(local_experiment)
+    if TOTAL_EPOCHS <= restored_epoch:
+        raise ValueError(f"TOTAL_EPOCHS must be greater than the restored epoch {restored_epoch}.")
 else:
+    if any(path.is_file() for path in DRIVE_RUN_DIR.rglob("*")):
+        raise RuntimeError("An existing training backup uses this name. Archive and release it locally, use resume, or choose a new name. Nothing was overwritten.")
     if local_experiment.exists():
         shutil.rmtree(local_experiment)
-    print("New run selected. Existing Drive backups are preserved until this run creates new ones.")'''
+    print("New run selected. Compact verified backups enabled.")'''
     )
 
     dataset = code(
@@ -382,40 +385,14 @@ else:
     )
 
     backup = code(
-        '''#@title 13. Save preprocessed data and checkpoints to Drive
-import shutil
-import time
-
-def copy_file_atomically(source, destination):
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    temporary = destination.with_suffix(destination.suffix + ".part")
-    shutil.copy2(source, temporary)
-    temporary.replace(destination)
-
+        '''#@title 13. Save training data once and keep one complete checkpoint pair
 def sync_checkpoints_to_drive():
-    local = Path(EXP_DIR)
-    copied = []
-    for pattern in ("G_*.pth", "D_*.pth", "filelist.txt", "config.json"):
-        for item in local.glob(pattern):
-            copy_file_atomically(item, DRIVE_CHECKPOINT_DIR / item.name)
-            copied.append(item.name)
-    if copied:
-        print(f"Checkpoint backup: {', '.join(sorted(copied))}")
-    return copied
+    return checkpoint_store.save_checkpoints(Path(EXP_DIR))
 
 def sync_experiment_to_drive():
-    local = Path(EXP_DIR)
-    if not local.exists():
-        raise FileNotFoundError(f"Experiment is missing: {local}")
-    staging = DRIVE_RUN_DIR / "experiment_staging"
-    if staging.exists():
-        shutil.rmtree(staging)
-    shutil.copytree(local, staging)
-    if DRIVE_EXPERIMENT_DIR.exists():
-        shutil.rmtree(DRIVE_EXPERIMENT_DIR)
-    staging.replace(DRIVE_EXPERIMENT_DIR)
+    checkpoint_store.save_data(Path(EXP_DIR))
     sync_checkpoints_to_drive()
-    print(f"Full experiment backup complete: {DRIVE_EXPERIMENT_DIR}")
+    print(f"Training data verified without duplicate model weights: {DRIVE_EXPERIMENT_DIR}")
 
 if RUN_MODE == "new":
     sync_experiment_to_drive()
@@ -474,6 +451,9 @@ filelist_path.write_text("\\n".join(filelist), encoding="utf-8")
 if filelist_path.stat().st_size == 0:
     raise RuntimeError("filelist.txt was created empty; training was not started.")
 print(f"Filelist written: {len(filelist)} items -> {filelist_path}")
+TRAINING_COMPLETE = False
+EXPORT_COMPLETE = False
+checkpoint_store.save_data(Path(EXP_DIR))
 
 sync_checkpoints_to_drive()
 environment = os.environ.copy()
@@ -507,6 +487,9 @@ if exit_code != 0 or saw_traceback:
         "Read the traceback printed above; do not proceed to index or export."
     )
 sync_experiment_to_drive()
+if not sync_checkpoints_to_drive():
+    raise RuntimeError("Final checkpoint backup is incomplete; export refused.")
+TRAINING_COMPLETE = True
 print("Training complete and fully backed up to Drive.")'''
     )
 
@@ -516,6 +499,10 @@ import glob
 import os
 import shutil
 from datetime import datetime
+
+EXPORT_COMPLETE = False
+if not TRAINING_COMPLETE:
+    raise RuntimeError("Complete the training cell successfully before exporting.")
 
 # RVC writes its final, inference-ready model to weights/. The G_*.pth and
 # D_*.pth files in logs/ are training checkpoints and must not be copied as the
@@ -570,18 +557,21 @@ if destination_model.exists() or destination_index.exists():
             shutil.copy2(existing, archive / existing.name)
     print(f"Previous export archived: {archive}")
 
-shutil.copy2(source_model, destination_model)
-shutil.copy2(source_index, destination_index)
+copy_verified(source_model, destination_model)
+copy_verified(source_index, destination_index)
 if destination_model.stat().st_size == 0 or destination_index.stat().st_size == 0:
     raise RuntimeError("Export verification failed: an output file is empty.")
 print(f"Exported model: {destination_model}")
-print(f"Exported index: {destination_index}")'''
+print(f"Exported index: {destination_index}")
+EXPORT_COMPLETE = True
+print("Next: retrieve the model locally, stop Colab, archive Drive locally, then release Drive from the application.")'''
     )
 
     cells = [
         markdown("# VOICECLONE-QC RVC Bridge\n\nRun the Drive authorization cell immediately after configuration. This notebook is pinned to the validated RVC v2 / 40k / RMVPE pipeline and saves resumable checkpoints to Drive."),
         config,
         mount_drive,
+        code((ROOT / "colab" / "checkpoint_store.py").read_text(encoding="utf-8")),
         dependencies,
         clone,
         title(old_cell(old, "GPU Check"), "5. GPU Check"),
@@ -601,6 +591,11 @@ print(f"Exported index: {destination_index}")'''
         title(old_cell(old, "Auto-disconnect runtime"), "17. Auto-disconnect runtime after successful export"),
     ]
     notebook["cells"] = cells
+    disconnect = notebook["cells"][-1]
+    disconnect_text = "".join(disconnect["source"])
+    guard = 'if not globals().get("EXPORT_COMPLETE", False):\n    raise RuntimeError("Current export not verified; runtime remains connected.")\n'
+    if guard not in disconnect_text:
+        disconnect["source"] = source(disconnect_text.replace("required_files = [", guard + "\nrequired_files = [", 1))
     NOTEBOOK.write_text(json.dumps(notebook, ensure_ascii=False, indent=1) + "\n", encoding="utf-8")
     print(f"Updated notebook safely: {NOTEBOOK}")
 

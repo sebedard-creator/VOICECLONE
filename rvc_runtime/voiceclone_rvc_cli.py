@@ -60,5 +60,19 @@ from rvc_cli.core import main  # noqa: E402
 
 
 if __name__ == "__main__":
+    # Optional repeatable noise for controlled comparisons; normal runs are unchanged.
+    if os.environ.get("VOICECLONE_COMPARE_SEED"):
+        import random
+        import numpy as np
+        import torch
+
+        comparison_seed = int(os.environ["VOICECLONE_COMPARE_SEED"])
+        random.seed(comparison_seed)
+        np.random.seed(comparison_seed)
+        torch.manual_seed(comparison_seed)
+        if torch.cuda.is_available():
+            torch.cuda.manual_seed_all(comparison_seed)
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
     sys.argv = ["rvc-cli", "infer", *sys.argv[1:]]
     main()

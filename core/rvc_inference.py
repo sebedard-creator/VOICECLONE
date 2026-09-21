@@ -22,6 +22,7 @@ def convert_voice(
     transpose: int = 0,
     index_rate: float = 0.75,
     protect: float = 0.33,
+    seed: int | None = None,
 ) -> Path:
     paths = ensure_runtime_layout(settings)
     if not model_path.exists():
@@ -50,6 +51,7 @@ def convert_voice(
             transpose=transpose,
             index_rate=index_rate,
             protect=protect,
+            seed=seed,
         )
         if not raw_output.exists():
             raise VoiceCloneError(
@@ -84,6 +86,7 @@ def _run_rvc_command(
     transpose: int,
     index_rate: float,
     protect: float,
+    seed: int | None = None,
 ) -> None:
     template = settings.rvc.command_template.strip()
     if not template:
@@ -113,6 +116,9 @@ def _run_rvc_command(
         raise ConfigurationError(f"Executable introuvable pour RVC: {executable}")
 
     env = build_subprocess_env(settings)
+    if seed is not None:
+        env["VOICECLONE_COMPARE_SEED"] = str(int(seed))
+        env["PYTHONHASHSEED"] = str(int(seed))
 
     completed = subprocess.run(
         command,

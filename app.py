@@ -20,6 +20,7 @@ from core.config import (
     load_settings,
 )
 from core.drive_sync import GoogleDriveClient, zip_cleaned_dataset
+from core.drive_archive import DriveArchive, snapshot_summary
 from core.errors import VoiceCloneError
 from core.ffmpeg_utils import ensure_ffmpeg_available
 from core.local_audio_tools import (
@@ -655,6 +656,43 @@ def run_drive_watch(actor_name: str, timeout_minutes: int, interval_seconds: int
     return _safe_call("surveillance Google Drive", _work)
 
 
+def archive_choices():
+    folder = SETTINGS.root_path / "archives_drive" / "snapshots"
+    return sorted((p.name for p in folder.glob("*.json") if not p.name.endswith(".removed.json")), reverse=True)
+
+
+def run_archive_drive():
+    def work():
+        archive = DriveArchive(SETTINGS, GoogleDriveClient.from_settings(SETTINGS))
+        path = archive.snapshot()
+        _, data = archive.load(path)
+        return _ok(snapshot_summary(data) + f"\nArchive: {path}\nAucun fichier Drive supprime."), path.name
+    result = _safe_call("archivage Drive", work)
+    if isinstance(result, tuple):
+        return result[0], gr.update(choices=archive_choices(), value=result[1])
+    return result, gr.update(choices=archive_choices())
+
+
+def run_release_drive(snapshot, confirmed_idle):
+    def work():
+        if not snapshot:
+            raise VoiceCloneError("Cree et selectionne une archive verifiee d'abord.")
+        archive = DriveArchive(SETTINGS, GoogleDriveClient.from_settings(SETTINGS))
+        removed = archive.remove_archived(snapshot, bool(confirmed_idle))
+        return _ok(f"{removed / 1e9:.3f} Go retires de Drive. Archives locales conservees; modeles utilisables localement.")
+    return _safe_call("liberation Drive", work), gr.update(value=False)
+
+
+def run_restore_archive(snapshot, actor_name):
+    def work():
+        if not snapshot:
+            raise VoiceCloneError("Selectionne une archive locale.")
+        archive = DriveArchive(SETTINGS, GoogleDriveClient.from_settings(SETTINGS))
+        count = archive.restore_actor(snapshot, actor_name)
+        return _ok(f"{count} fichier(s) verifies sur Drive. Dans Colab, choisis ce comedien, RUN_MODE=resume et un total d'epochs superieur au precedent.")
+    return _safe_call("restauration Drive", work)
+
+
 def run_conversion(
     model_path: str | None,
     guide_file: str | None,
@@ -949,6 +987,26 @@ def build_ui(settings: Settings) -> gr.Blocks:
                     queue=False,
                 )
 
+                with gr.Accordion("Espace Drive et archives locales", open=False):
+                    gr.Markdown(
+                        "Archive les trois dossiers VOICECLONE sur ce disque, avec verification et une seule copie des fichiers identiques. "
+                        "Les archives sont conservees dans `archives_drive` et protegees du bouton Vider la cache. "
+                        "Apres un entrainement termine, arrete Colab, archive, puis libere Drive."
+                    )
+                    archive_button = gr.Button("1. Archiver Drive localement", variant="primary")
+                    snapshots = gr.Dropdown(label="Archive locale", choices=archive_choices())
+                    archive_status = gr.Textbox(label="Archivage et verification", lines=9, interactive=False)
+                    release_confirm = gr.Checkbox(
+                        label="Colab est arrete. Je confirme la suppression definitive des copies Drive de TOUS les fichiers de cette archive, apres verification locale.",
+                        value=False,
+                    )
+                    release_button = gr.Button("2. Liberer Drive avec cette archive", variant="stop")
+                    gr.Markdown("Pour continuer une voix plus tard : selectionne son archive et renseigne son nom dans Nom du comedien ci-dessus. Attends la fin de la restauration avant de lancer Colab en mode resume.")
+                    restore_button = gr.Button("Remettre cette voix sur Drive pour reprendre l'entrainement")
+                    archive_button.click(run_archive_drive, outputs=[archive_status, snapshots])
+                    release_button.click(run_release_drive, inputs=[snapshots, release_confirm], outputs=[archive_status, release_confirm])
+                    restore_button.click(run_restore_archive, inputs=[snapshots, drive_actor], outputs=[archive_status])
+
             gr.Markdown("## RVC")
             with gr.Group():
                 with gr.Row():
@@ -982,7 +1040,7 @@ def build_ui(settings: Settings) -> gr.Blocks:
                     with gr.Column():
                         gr.HTML(
                             '<div class="vc-label">Protect'
-                            '<span class="vc-help" data-help="Protege les consonnes, respirations et sons non chantes/parles contre les deformations. Plus haut = articulation plus stable, mais un peu moins de transformation vocale. 0.33 est un bon compromis.">?</span>'
+                            '<span class="vc-help" data-help="Protege les consonnes et respirations contre les deformations liees a l index. Dans ce moteur, une valeur plus basse renforce cette protection. 0.5 la desactive. Compare 0.15, 0.25 et 0.33 selon la replique.">?</span>'
                             '</div>'
                         )
                         protect = gr.Slider(0, 0.5, value=0.33, step=0.01, label=None)

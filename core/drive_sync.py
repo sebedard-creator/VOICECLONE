@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import time
 import zipfile
+from uuid import uuid4
 from pathlib import Path
 
 from .config import Settings, ensure_runtime_layout, resolve_runtime_file
@@ -142,24 +143,40 @@ class GoogleDriveClient:
             settings.google_drive.return_folder_name,
         )
 
-    def upload_file(self, file_path: Path, folder_id: str) -> dict:
+    def upload_file(self, file_path: Path, folder_id: str, name: str | None = None) -> dict:
+        from .drive_archive import digest, list_files
         try:
             from googleapiclient.http import MediaFileUpload
         except ImportError as exc:
             raise DependencyMissing("google-api-python-client est requis pour uploader sur Drive.") from exc
 
-        metadata = {"name": file_path.name, "parents": [folder_id]}
+        name = name or file_path.name
+        escaped = self._escape_query_literal(name)
+        parent = self._escape_query_literal(folder_id)
+        existing = list_files(self.service, f"'{parent}' in parents and trashed=false and name='{escaped}'")
+        checksum = digest(file_path)
+        if existing:
+            if any(f.get('md5Checksum') != checksum or int(f.get('size', -1)) != file_path.stat().st_size for f in existing):
+                raise VoiceCloneError(
+                    f"Une autre version de {name} existe sur Drive. Archive puis libere les fichiers Drive "
+                    "avant de la remplacer; aucun fichier existant n'a ete ecrase."
+                )
+            return existing[0]
+        metadata = {"name": name, "parents": [folder_id]}
         media = MediaFileUpload(str(file_path), resumable=True)
-        return (
+        uploaded = (
             self.service.files()
             .create(
                 body=metadata,
                 media_body=media,
-                fields="id,name,webViewLink",
+                fields="id,name,webViewLink,size,md5Checksum",
                 supportsAllDrives=True,
             )
             .execute()
         )
+        if uploaded.get('md5Checksum') != checksum or int(uploaded.get('size', -1)) != file_path.stat().st_size:
+            raise VoiceCloneError("Verification de l'upload echouee. La copie locale est conservee.")
+        return uploaded
 
     def test_connection(self) -> str:
         upload_folder = (
@@ -212,27 +229,39 @@ class GoogleDriveClient:
         )
 
     def download_file(self, file_id: str, destination: Path) -> Path:
+        from .drive_archive import digest, same_file, FIELDS
         try:
             from googleapiclient.http import MediaIoBaseDownload
         except ImportError as exc:
             raise DependencyMissing("google-api-python-client est requis pour telecharger depuis Drive.") from exc
 
-        request = self.service.files().get_media(fileId=file_id)
+        metadata = self.service.files().get(fileId=file_id, fields=FIELDS, supportsAllDrives=True).execute()
+        if not metadata.get('md5Checksum'):
+            raise VoiceCloneError("Fichier Drive sans empreinte verifiable.")
+        request = self.service.files().get_media(fileId=file_id, supportsAllDrives=True)
         destination.parent.mkdir(parents=True, exist_ok=True)
-        with io.FileIO(destination, "wb") as handle:
-            downloader = MediaIoBaseDownload(handle, request)
-            done = False
-            while not done:
-                _, done = downloader.next_chunk()
+        temporary = destination.with_name(destination.name + '.' + uuid4().hex + '.part')
+        try:
+            with io.FileIO(temporary, "wb") as handle:
+                downloader = MediaIoBaseDownload(handle, request, chunksize=8 * 1024 * 1024)
+                done = False
+                while not done:
+                    _, done = downloader.next_chunk(num_retries=2)
+            after = self.service.files().get(fileId=file_id, fields=FIELDS, supportsAllDrives=True).execute()
+            if (not same_file(metadata, after) or temporary.stat().st_size != int(metadata['size'])
+                    or digest(temporary) != metadata['md5Checksum']):
+                raise VoiceCloneError("Le fichier Drive a change ou son telechargement est incomplet.")
+            temporary.replace(destination)
+        finally:
+            temporary.unlink(missing_ok=True)
         return destination
 
     def _find_first_file(self, actor_slug: str, extension: str) -> dict | None:
         folder_id = self._escape_query_literal(self._get_return_folder_id())
-        actor_query = self._escape_query_literal(actor_slug)
-        ext_query = self._escape_query_literal(extension)
+        exact_name = self._escape_query_literal(actor_slug + extension)
         query = (
             f"'{folder_id}' in parents and trashed=false "
-            f"and name contains '{actor_query}' and name contains '{ext_query}'"
+            f"and name = '{exact_name}'"
         )
         response = (
             self.service.files()

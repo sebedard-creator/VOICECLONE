@@ -56,6 +56,20 @@ unchanged, and shows an active processing indicator while the task runs.
 
 ## Local Workflow Controls
 
+For controlled auditions, `scripts/compare_rvc.py --model <model.pth> --guide <guide.wav>`
+creates five conversions of the same guide, changing only the index influence or
+consonant protection relative to the baseline. An optional `--reference <voice.wav>`
+adds a timbre reference. Outputs are placed in `outputs/comparisons/` with an
+`ecouter.html` listening page, original WAV files, and a parameter/measurement log.
+Listening copies use matched integrated loudness through constant gain, without
+compression or limiting; original renders remain available. A fixed random seed
+reduces run-to-run variation. Like other outputs, these auditions are removed by
+the application's explicit cache-clearing operation.
+
+In the installed RVC runtime, lower Protect values preserve more of the original
+unvoiced features during index blending; 0.5 disables this protection. The interface
+help now reflects the implementation rather than the inverted upstream help text.
+
 - A single-task queue prevents multiple heavy audio operations from competing
   for the same machine resources.
 - The RVC conversion controls expose pitch transposition, index influence, and
@@ -100,6 +114,45 @@ Local audio files
 6. Open the local web interface at `http://localhost:7860/`.
 
 ## Colab Workflow
+
+### Drive storage and local archives (bridge 1.3.0)
+
+The **Cloud > Espace Drive et archives locales** panel provides this workflow:
+
+1. Finish training, retrieve the final model, and stop the Colab runtime.
+2. Click **Archiver Drive localement**. The three configured VOICECLONE folders
+   are downloaded into `archives_drive/` on the project disk. Identical content
+   shares one stored copy. Downloads and the complete snapshot are verified;
+   interrupted downloads can be retried without downloading verified objects again.
+3. Select that snapshot, confirm that Colab is stopped, and click **Liberer Drive**.
+   This permanently removes only the unchanged files in that verified snapshot.
+   It does not empty the Google Drive trash or delete folders. New or changed
+   files block cleanup. Local models and archives remain available.
+4. To continue training later, select the snapshot and the actor name, then click
+   **Remettre cette voix sur Drive**. Wait for completion before running Colab
+   with `RUN_MODE=resume` and a larger total epoch count. Resume restores prepared
+   training data and checkpoints; it does not need to upload the dataset ZIP again.
+
+The local archive uses `objects/` for content and `snapshots/` for inventories.
+Keep both directories together and include `archives_drive/` in your disk backups.
+It is excluded from Git and from the application's cache-clearing operation.
+Archiving alone never removes Drive files. Cleanup is an explicit separate action
+because it includes all three project folders, possibly containing several voices.
+
+Identical dataset uploads are reused. Uploading different content under an existing
+name is refused until the old data is archived and removed, preventing silent
+replacement and accumulation of same-name datasets.
+
+Bridge 1.3.0 keeps prepared data once and one verified, matching G/D checkpoint
+pair. A new pair is uploaded and verified before it replaces the previous pair;
+the temporary handover still needs space for both pairs. The steady-state duplicate
+weights previously kept in `experiment/` are eliminated. Resume also understands
+v1.2.x backups and chooses the newest complete pair rather than an outdated
+experiment copy. New runs refuse to overwrite an existing training backup.
+
+The archive/checkpoint behavior is covered by `python -m unittest discover -s tests -v`.
+Regenerate the notebook from the maintained helper with
+`python scripts/update_colab_notebook.py` after changing `colab/checkpoint_store.py`.
 
 The included `VOICECLONE_QC_RVC_Bridge.ipynb` is a reproducible training bridge.
 Run the Google Drive mount cell immediately after its configuration cell to

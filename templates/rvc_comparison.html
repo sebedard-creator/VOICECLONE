@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Catherine — écoute comparative</title>
+<style>
+:root{color-scheme:dark;font-family:Inter,Segoe UI,system-ui,sans-serif;color:#edf1f7;background:#111821}*{box-sizing:border-box}body{margin:0;padding:42px 24px}main{max-width:960px;margin:auto}.eyebrow{color:#97b7af;text-transform:uppercase;font-size:12px;letter-spacing:2px}h1{font-weight:580;font-size:clamp(28px,5vw,44px);margin:12px 0}.sub{color:#aebdca;line-height:1.7;margin-bottom:28px}.panel{border:1px solid #334251;background:#18232e;border-radius:16px;padding:24px;margin:20px 0}.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}button,a.download{border:1px solid #455564;background:#24323f;border-radius:10px;padding:12px 18px;color:#edf1f7;cursor:pointer;font:inherit;text-decoration:none}button:hover,button:focus-visible,a.download:hover{border-color:#a2d8c5;background:#30473f}.active{background:#a2d8c5!important;color:#102a22!important;border-color:#a2d8c5!important}.choices{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:22px}.choice{font-size:25px;padding:20px 8px}.choice span{display:block;font-size:11px;min-height:15px;margin-top:8px}audio{width:100%;margin:18px 0 8px}.muted{color:#aebdca;font-size:14px;line-height:1.6}.player-title{font-size:20px;font-weight:600}label{color:#bdcbd6;font-size:14px}input[type=number]{width:84px;background:#101a24;color:#edf1f7;border:1px solid #455564;border-radius:6px;padding:9px;margin:0 8px}table{width:100%;border-collapse:collapse;font-size:14px;margin-top:18px}td,th{padding:12px 8px;border-bottom:1px solid #334251;text-align:left}th{color:#aebdca;font-weight:500}textarea{width:100%;min-height:115px;background:#111c27;color:#edf1f7;border:1px solid #455564;border-radius:8px;padding:12px;font:inherit;margin-top:12px}.footer{margin:28px 0;color:#92a3b2;font-size:13px;line-height:1.7}.badge{font-size:12px;border:1px solid #455564;border-radius:20px;padding:6px 10px;color:#bdcbd6;margin-left:auto}.error{color:#ffb4a9}details summary{cursor:pointer} @media(max-width:560px){body{padding:22px 14px}.panel{padding:18px}.choices{gap:7px}.choice{font-size:22px}td,th{padding:10px 4px}.badge{margin-left:0}}
+</style></head><body><main>
+<div class="eyebrow">VOICECLONE · Atelier de postproduction</div>
+<h1>Catherine — écoute comparative</h1>
+<p class="sub">Un même guide, cinq réglages et un niveau d’écoute harmonisé.<br>Commence par écouter sans afficher les paramètres, puis retiens les versions qui se raccordent le mieux.</p>
+<div class="panel">
+  <div class="row"><button data-code="Guide">Écouter le guide</button><button data-code="Reference" id="reference-button">Voix de référence</button><span class="badge" id="level"></span></div>
+  <div class="choices" id="choices"></div>
+  <div style="margin-top:26px" class="player-title" id="current">Version A</div>
+  <div class="muted" id="description">Les paramètres sont masqués pour la première écoute.</div>
+  <audio id="player" controls preload="metadata"></audio>
+  <div class="row"><button id="restart">Recommencer</button><label><input type="checkbox" id="loop"> Boucler un passage</label><label>De <input type="number" id="start" min="0" step="0.1" value="0"> à <input type="number" id="end" min="0.1" step="0.1" value="5"> s</label></div>
+  <p class="muted">Passe de A à E en cliquant sur une version ou avec les touches A à E : la position d’écoute est conservée. La référence contient un autre texte ; elle sert à comparer le timbre.</p>
+  <div class="row"><button id="reveal">Afficher les réglages</button><a id="download" class="download" download>Télécharger le WAV original</a></div>
+  <div id="settings" hidden></div><p id="error" class="error" role="status"></p>
+</div>
+<div class="panel"><div class="player-title">Ce qu’il faut départager</div>
+<p class="muted">Ressemblance avec Catherine · consonnes et fins de mots · absence de son métallique · respirations · intention et timing.<br>Évalue ensuite tes finalistes dans la scène, au même niveau que les répliques voisines.</p>
+<label for="notes">Tes préférences et les passages à reprendre</label><textarea id="notes" placeholder="Par exemple : B plus naturelle ; E conserve mieux les consonnes à 4 s…"></textarea><p class="muted">Les notes sont enregistrées dans ce navigateur.</p></div>
+<div class="footer" id="method"></div>
+</main><script>
+const data=__COMPARISON_DATA__;
+const items=new Map(data.listening.map(x=>[x.code,x]));
+const player=document.getElementById('player');let selected='A',revealed=false,requestId=0;
+const choices=document.getElementById('choices');
+for(const v of data.variants){const b=document.createElement('button');b.className='choice';b.dataset.code=v.code;b.textContent=v.code;const s=document.createElement('span');s.textContent='Version '+v.code;b.appendChild(s);choices.appendChild(b)}
+document.getElementById('level').textContent=data.listening_target_lufs.toFixed(1)+' LUFS · écoute';
+if(!items.has('Reference'))document.getElementById('reference-button').hidden=true;
+function label(){const item=items.get(selected);document.getElementById('current').textContent=['Guide','Reference'].includes(selected)?(selected==='Guide'?'Guide original':'Catherine — référence de timbre'):'Version '+selected;document.getElementById('description').textContent=item.index_rate!==undefined?(revealed?'Index '+item.index_rate.toFixed(2)+' · Protect '+item.protect.toFixed(2)+' · '+item.description:'Les paramètres sont masqués pour la première écoute.'):item.description;document.getElementById('download').href=item.original;document.querySelectorAll('[data-code]').forEach(b=>{b.classList.toggle('active',b.dataset.code===selected);b.setAttribute('aria-pressed',String(b.dataset.code===selected))})}
+async function choose(code){if(!items.has(code))return;const id=++requestId;const t=(code==='Reference'||selected==='Reference')?0:player.currentTime||0;const playing=!player.paused;player.pause();selected=code;label();player.src=items.get(code).listening_file;player.onloadedmetadata=()=>{if(id!==requestId)return;player.currentTime=Math.min(t,Math.max(0,player.duration-0.05));document.getElementById('end').max=player.duration;if(playing)player.play().catch(()=>{})};player.load()}
+document.addEventListener('click',e=>{const b=e.target.closest('[data-code]');if(b)choose(b.dataset.code)});
+document.addEventListener('keydown',e=>{if(e.ctrlKey||e.metaKey||e.altKey||['INPUT','TEXTAREA'].includes(e.target.tagName))return;const key=e.key.toUpperCase();if(['A','B','C','D','E'].includes(key)){e.preventDefault();choose(key)}});
+document.getElementById('restart').onclick=()=>{player.currentTime=0;player.play().catch(()=>{})};
+player.ontimeupdate=()=>{if(!document.getElementById('loop').checked)return;const start=Number(document.getElementById('start').value),end=Math.min(player.duration,Number(document.getElementById('end').value));if(Number.isFinite(start)&&end>start+0.1&&player.currentTime>=end)player.currentTime=Math.max(0,start)};
+player.onended=()=>{if(document.getElementById('loop').checked){const start=Number(document.getElementById('start').value);if(start>=0&&start<player.duration){player.currentTime=start;player.play().catch(()=>{})}}};
+player.onerror=()=>document.getElementById('error').textContent='Lecture indisponible. Conserve ecouter.html et le dossier ecoute ensemble, ou utilise les WAV originaux.';
+const table=document.createElement('table');table.innerHTML='<thead><tr><th>Version</th><th>Index</th><th>Protect</th><th>Comparaison</th></tr></thead>';
+const tbody=document.createElement('tbody');for(const v of data.variants){const tr=document.createElement('tr');for(const value of [v.code,v.index_rate.toFixed(2),v.protect.toFixed(2),v.description]){const td=document.createElement('td');td.textContent=value;tr.appendChild(td)}tbody.appendChild(tr)}table.appendChild(tbody);document.getElementById('settings').appendChild(table);
+document.getElementById('reveal').onclick=()=>{revealed=!revealed;document.getElementById('settings').hidden=!revealed;document.getElementById('reveal').textContent=revealed?'Masquer les réglages':'Afficher les réglages';label()};
+document.getElementById('method').textContent='Modèle : '+data.model.split(/[\\/]/).pop()+' · RMVPE · Transpose '+data.transpose+'. Un seul réglage change par rapport à A. Même graine aléatoire pour les conversions. Les copies d’écoute sont ajustées par gain constant, sans compression ni limiteur. Les WAV originaux conservent leur niveau de sortie. Aucun classement automatique de la qualité.';
+const notes=document.getElementById('notes'),key='voiceclone-audition:'+location.pathname;try{notes.value=localStorage.getItem(key)||''}catch{}notes.oninput=()=>{try{localStorage.setItem(key,notes.value)}catch{}};
+choose('A');
+</script></body></html>

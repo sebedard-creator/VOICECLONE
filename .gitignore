@@ -22,6 +22,7 @@ __pycache__/
 /Nettoyage Seul/
 /outputs/
 /models_bank/
+/archives_drive/
 /README.txt
 
 # Installed local runtimes: keep only the small VOICECLONE wrapper scripts
